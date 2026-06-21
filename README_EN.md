@@ -2,6 +2,8 @@
 
 English | [简体中文](README.md)
 
+[![Android CI](https://github.com/shermerL/moq-screencast/actions/workflows/android.yml/badge.svg)](https://github.com/shermerL/moq-screencast/actions/workflows/android.yml)
+
 A native Android sample project for learning and evaluating [Media over QUIC](https://moq.dev/). The app can subscribe to and play a broadcast through a MoQ relay. It can also capture an Android screen, encode it as H.264, and publish it to a specified broadcast.
 
 This project is built on the MoQ implementation and Kotlin/Android bindings provided by [moq-dev/moq](https://github.com/moq-dev/moq). Thanks to Luke Curley and all `moq-dev` contributors for their continued work on the MoQ protocol implementation, native bindings, and open source ecosystem.
@@ -117,7 +119,7 @@ This project uses the Kotlin/Android bindings provided by `moq-dev/moq`:
 
 - Maven coordinates: `dev.moq:moq:0.2.18`
 - Source: [github.com/moq-dev/moq](https://github.com/moq-dev/moq)
-- Authors: Luke Curley, Brian Medley, and other MoQ contributors
+- Authors: Luke Curley and other MoQ contributors
 - License: [Apache License 2.0](https://github.com/moq-dev/moq/blob/main/LICENSE-APACHE) or [MIT License](https://github.com/moq-dev/moq/blob/main/LICENSE-MIT)
 
 The `dev.moq:moq` package includes the Rust implementation, UniFFI-generated Kotlin interfaces, and Android native dynamic libraries. This project is just an independently developed Android sample.

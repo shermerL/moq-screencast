@@ -1,4 +1,4 @@
-package com.example.moqandroid.publish
+package com.example.moqandroid.publish.encoder
 
 private val START_CODE = byteArrayOf(0, 0, 0, 1)
 

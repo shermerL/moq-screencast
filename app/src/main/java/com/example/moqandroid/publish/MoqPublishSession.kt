@@ -1,29 +1,30 @@
 package com.example.moqandroid.publish
 
-import android.media.projection.MediaProjection
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
+import com.example.moqandroid.publish.encoder.SurfaceVideoEncoder
+import com.example.moqandroid.publish.screen.SystemAudioConfig
+import com.example.moqandroid.publish.screen.encoderInput
+import com.example.moqandroid.publish.screen.encoderOutput
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import uniffi.moq.MoqBroadcastProducer
+import uniffi.moq.MoqAudioProducer
 import uniffi.moq.MoqClient
 import uniffi.moq.MoqOriginProducer
 
-class MoqScreenPublishSession(
+class MoqPublishSession(
     private val relayUrl: String,
     private val status: (PublishState) -> Unit,
 ) {
     suspend fun publish(
-        projection: MediaProjection,
+        source: VideoPublishSource,
         broadcastName: String,
-        config: ScreenPublishConfig,
+        config: PublishSessionConfig,
+        audioCapture: (suspend CoroutineScope.(MoqAudioProducer, SystemAudioConfig.Enabled) -> Unit)? = null,
     ) {
         status(PublishState.Preparing)
-        val projectionCallback = registerProjectionCallback(projection, currentCoroutineContext()[Job])
 
         try {
             MoqBroadcastProducer().use { broadcast ->
@@ -49,7 +50,7 @@ class MoqScreenPublishSession(
                                         val audioConfig = config.audio as SystemAudioConfig.Enabled
                                         launch {
                                             runCatching {
-                                                SystemAudioCapture(projection, producer, audioConfig, LOG_TAG).run()
+                                                audioCapture?.invoke(this, producer, audioConfig)
                                             }.onFailure { error ->
                                                 if (error !is CancellationException) {
                                                     Log.w(LOG_TAG, "system audio capture failed", error)
@@ -62,7 +63,7 @@ class MoqScreenPublishSession(
                                     }
 
                                     try {
-                                        ScreenVideoEncoder(projection, media, relayUrl, status).run(config.video, broadcastName, config.audio)
+                                        SurfaceVideoEncoder(source, media, relayUrl, status).run(config.video, broadcastName, config.audio)
                                     } finally {
                                         audioJob?.cancel()
                                     }
@@ -76,35 +77,18 @@ class MoqScreenPublishSession(
                 }
             }
         } finally {
-            projection.unregisterCallbackSafe(projectionCallback)
-            projection.stopSafe()
+            source.close()
         }
 
         status(PublishState.Stopped)
-    }
-
-    private fun registerProjectionCallback(projection: MediaProjection, job: Job?): MediaProjection.Callback {
-        val callback = object : MediaProjection.Callback() {
-            override fun onStop() {
-                Log.i(LOG_TAG, "media projection stopped")
-                job?.cancel(CancellationException("MediaProjection stopped by Android."))
-            }
-        }
-        projection.registerCallback(callback, Handler(Looper.getMainLooper()))
-        return callback
-    }
-
-    private fun MediaProjection.unregisterCallbackSafe(callback: MediaProjection.Callback) {
-        runCatching { unregisterCallback(callback) }
-            .onFailure { Log.w(LOG_TAG, "failed to unregister media projection callback", it) }
-    }
-
-    private fun MediaProjection.stopSafe() {
-        runCatching { stop() }
-            .onFailure { Log.w(LOG_TAG, "failed to stop media projection", it) }
     }
 
     companion object {
         private const val LOG_TAG = "MoqAndroid"
     }
 }
+
+data class PublishSessionConfig(
+    val video: VideoPublishConfig,
+    val audio: SystemAudioConfig = SystemAudioConfig.Disabled,
+)

@@ -1,31 +1,31 @@
-package com.example.moqandroid.publish
+package com.example.moqandroid.publish.encoder
 
-import android.hardware.display.DisplayManager
-import android.hardware.display.VirtualDisplay
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
-import android.media.projection.MediaProjection
 import android.os.Bundle
+import com.example.moqandroid.publish.PublishState
+import com.example.moqandroid.publish.VideoPublishConfig
+import com.example.moqandroid.publish.VideoPublishSource
+import com.example.moqandroid.publish.screen.SystemAudioConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import uniffi.moq.MoqMediaStreamProducer
 import kotlin.coroutines.coroutineContext
 
-class ScreenVideoEncoder(
-    private val projection: MediaProjection,
+class SurfaceVideoEncoder(
+    private val source: VideoPublishSource,
     private val media: MoqMediaStreamProducer,
     private val relayUrl: String,
     private val status: (PublishState) -> Unit,
 ) {
     suspend fun run(
-        config: ScreenVideoConfig,
+        config: VideoPublishConfig,
         broadcastName: String,
         audioConfig: SystemAudioConfig,
     ) = withContext(Dispatchers.Default) {
         val codec = MediaCodec.createEncoderByType(MIME_AVC)
-        var virtualDisplay: VirtualDisplay? = null
         var codecStarted = false
         val stats = PublishStatsTracker(relayUrl, broadcastName)
 
@@ -46,16 +46,7 @@ class ScreenVideoEncoder(
             codec.start()
             codecStarted = true
 
-            virtualDisplay = projection.createVirtualDisplay(
-                "MoqScreenPublish",
-                config.width,
-                config.height,
-                config.densityDpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                inputSurface,
-                null,
-                null,
-            )
+            source.attachEncoderSurface(inputSurface, config)
             codec.setParameters(Bundle().apply {
                 putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
             })
@@ -74,7 +65,7 @@ class ScreenVideoEncoder(
             drain(codec, media, stats, status)
         } finally {
             status(PublishState.Stopping)
-            virtualDisplay?.release()
+            source.detachEncoderSurface()
             if (codecStarted) runCatching { codec.stop() }
             codec.release()
             runCatching { media.finish() }
@@ -151,12 +142,3 @@ class ScreenVideoEncoder(
         private const val MIME_AVC = "video/avc"
     }
 }
-
-data class ScreenVideoConfig(
-    val width: Int,
-    val height: Int,
-    val densityDpi: Int,
-    val bitrate: Int = 4_000_000,
-    val frameRate: Int = 30,
-    val iFrameIntervalSeconds: Int = 1,
-)

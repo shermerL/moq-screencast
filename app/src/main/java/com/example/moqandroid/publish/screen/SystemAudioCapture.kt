@@ -1,4 +1,4 @@
-package com.example.moqandroid.publish
+package com.example.moqandroid.publish.screen
 
 import android.media.AudioAttributes
 import android.media.AudioFormat

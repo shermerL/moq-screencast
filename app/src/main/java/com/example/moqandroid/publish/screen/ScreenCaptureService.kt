@@ -1,4 +1,4 @@
-package com.example.moqandroid.publish
+package com.example.moqandroid.publish.screen
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -8,11 +8,17 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import com.example.moqandroid.R
+import com.example.moqandroid.publish.MoqPublishSession
+import com.example.moqandroid.publish.PublishSessionConfig
+import com.example.moqandroid.publish.PublishState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +28,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 
 class ScreenCaptureService : Service() {
@@ -104,10 +111,25 @@ class ScreenCaptureService : Service() {
                 Log.i(LOG_TAG, "creating MediaProjection after foreground service started")
                 val projection = manager.getMediaProjection(resultCode, resultData)
                     ?: error("Android did not return a MediaProjection.")
-                MoqScreenPublishSession(
-                    relayUrl = relayUrl,
-                    status = ::updateStatus,
-                ).publish(projection, broadcastName, config)
+                val projectionCallback = projection.registerStopCallback(currentCoroutineContext()[Job])
+                try {
+                    MoqPublishSession(
+                        relayUrl = relayUrl,
+                        status = ::updateStatus,
+                    ).publish(
+                        source = ScreenPublishSource(projection, config.video.densityDpi),
+                        broadcastName = broadcastName,
+                        config = PublishSessionConfig(
+                            video = config.video.encoderConfig(),
+                            audio = config.audio,
+                        ),
+                    ) { producer, audioConfig ->
+                        SystemAudioCapture(projection, producer, audioConfig, LOG_TAG).run()
+                    }
+                } finally {
+                    projection.unregisterCallbackSafe(projectionCallback)
+                    projection.stopSafe()
+                }
             }.onFailure { error ->
                 if (error is CancellationException) {
                     Log.i(LOG_TAG, "screen publish cancelled: ${error.message}")
@@ -122,6 +144,27 @@ class ScreenCaptureService : Service() {
                 if (generation == publishGeneration) stopSelf()
             }
         }
+    }
+
+    private fun MediaProjection.registerStopCallback(job: Job?): MediaProjection.Callback {
+        val callback = object : MediaProjection.Callback() {
+            override fun onStop() {
+                Log.i(LOG_TAG, "media projection stopped")
+                job?.cancel(CancellationException("MediaProjection stopped by Android."))
+            }
+        }
+        registerCallback(callback, Handler(Looper.getMainLooper()))
+        return callback
+    }
+
+    private fun MediaProjection.unregisterCallbackSafe(callback: MediaProjection.Callback) {
+        runCatching { unregisterCallback(callback) }
+            .onFailure { Log.w(LOG_TAG, "failed to unregister media projection callback", it) }
+    }
+
+    private fun MediaProjection.stopSafe() {
+        runCatching { stop() }
+            .onFailure { Log.w(LOG_TAG, "failed to stop media projection", it) }
     }
 
     private fun stopPublishing(updateStopped: Boolean) {

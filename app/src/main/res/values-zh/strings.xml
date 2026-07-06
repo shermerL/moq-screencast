@@ -32,6 +32,17 @@
     <string name="relay_updated">Relay 已更新。</string>
     <string name="language_set">语言已设置为 %1$s。</string>
     <string name="publish_compatibility_mode">H.264 兼容模式</string>
+    <string name="publish_status_starting">正在启动屏幕发布 ...</string>
+    <string name="publish_status_preparing">正在准备屏幕发布 ...</string>
+    <string name="publish_status_connecting">正在发布到 %1$s ...\nbroadcast=%2$s</string>
+    <string name="publish_status_publishing">正在发布到 %1$s\nbroadcast=%2$s\nvideo=%3$dx%4$d %5$dfps target=%6$dkbps\n系统音频=%7$s</string>
+    <string name="publish_status_stats">正在发布到 %1$s\nbroadcast=%2$s\nsent=%3$d frames bytes=%4$d bitrate=%5$.0fkbps</string>
+    <string name="publish_status_stopping">正在停止屏幕发布 ...</string>
+    <string name="publish_status_stopped">屏幕发布已停止。</string>
+    <string name="publish_status_audio_failed">系统音频采集失败:\n%1$s\n视频发布仍在运行。</string>
+    <string name="publish_status_failed">屏幕发布失败:\n%1$s</string>
+    <string name="system_audio_on">on</string>
+    <string name="system_audio_off">off</string>
     <string name="broadcast_empty">Broadcast 名称不能为空。</string>
     <string name="screen_publish_stopped">屏幕发布已停止。</string>
     <string name="screen_capture_permission_denied">屏幕采集权限被拒绝。</string>

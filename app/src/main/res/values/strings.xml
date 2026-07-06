@@ -32,6 +32,17 @@
     <string name="relay_updated">Relay updated.</string>
     <string name="language_set">Language set to %1$s.</string>
     <string name="publish_compatibility_mode">H.264 compatibility mode</string>
+    <string name="publish_status_starting">Starting screen publish ...</string>
+    <string name="publish_status_preparing">Preparing screen publish ...</string>
+    <string name="publish_status_connecting">Publishing to %1$s ...\nbroadcast=%2$s</string>
+    <string name="publish_status_publishing">Publishing to %1$s\nbroadcast=%2$s\nvideo=%3$dx%4$d %5$dfps target=%6$dkbps\nsystem audio=%7$s</string>
+    <string name="publish_status_stats">Publishing to %1$s\nbroadcast=%2$s\nsent=%3$d frames bytes=%4$d bitrate=%5$.0fkbps</string>
+    <string name="publish_status_stopping">Stopping screen publish ...</string>
+    <string name="publish_status_stopped">Screen publish stopped.</string>
+    <string name="publish_status_audio_failed">System audio capture failed:\n%1$s\nVideo publish is still running.</string>
+    <string name="publish_status_failed">Screen publish failed:\n%1$s</string>
+    <string name="system_audio_on">on</string>
+    <string name="system_audio_off">off</string>
     <string name="broadcast_empty">Broadcast name cannot be empty.</string>
     <string name="screen_publish_stopped">Screen publish stopped.</string>
     <string name="screen_capture_permission_denied">Screen capture permission denied.</string>

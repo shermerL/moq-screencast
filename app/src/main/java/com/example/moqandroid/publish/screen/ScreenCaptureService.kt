@@ -73,7 +73,7 @@ class ScreenCaptureService : Service() {
 
     override fun onDestroy() {
         Log.i(LOG_TAG, "screen capture service destroyed")
-        stopPublishing(updateStopped = statusFacade.uiState.value !is PublishState.Failed)
+        stopPublishing(updateStopped = !statusFacade.isError)
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -171,7 +171,7 @@ class ScreenCaptureService : Service() {
 
     private fun stopPublishing(updateStopped: Boolean) {
         publishGeneration += 1
-        updateState(PublisherState.Stopping)
+        statusFacade.stopIfActive()
         publishJob?.cancel(CancellationException("Screen publish stopped."))
         publishJob = null
         if (updateStopped) updateState(PublisherState.Stopped)

@@ -56,9 +56,16 @@ class PublishStatusFacade {
             -> true
         }
 
+    val isError: Boolean
+        get() = publisherState is PublisherState.Error
+
     fun updateState(state: PublisherState) {
         publisherState = state
         mutableUiState.value = state.toPublishState()
+    }
+
+    fun stopIfActive() {
+        if (isActive) updateState(PublisherState.Stopping)
     }
 
     fun updateEvent(event: PublisherEvent) {

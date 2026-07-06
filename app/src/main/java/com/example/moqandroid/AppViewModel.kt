@@ -21,6 +21,7 @@ import com.example.moqandroid.playback.PlayerState
 import com.example.moqandroid.publish.PublishController
 import com.example.moqandroid.publish.PublishRequest
 import com.example.moqandroid.publish.PublishState
+import com.example.moqandroid.publish.PublishStatusFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -218,7 +219,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         resultData: Intent,
         metrics: DisplayMetrics,
     ) {
-        publishStatusMessage = "Starting screen publish ..."
+        publishStatusMessage = text(R.string.publish_status_starting)
         publishController.start(
             relayConfig = relayConfig,
             broadcastName = activeBroadcastName,
@@ -292,7 +293,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun updatePublishStatus(state: PublishState) {
-        val message = state.message()
+        val message = PublishStatusFormatter(localizedContext()).format(state)
         Log.i(logTag, message)
         viewModelScope.launch(Dispatchers.Main.immediate) {
             publishStatusMessage = message
@@ -300,10 +301,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun text(@StringRes resId: Int, vararg args: Any): String {
-        return getApplication<Application>()
-            .withAppLanguage(appLanguage)
-            .getString(resId, *args)
+        return localizedContext().getString(resId, *args)
     }
+
+    private fun localizedContext() = getApplication<Application>()
+        .withAppLanguage(appLanguage)
 }
 
 enum class AppScreen {

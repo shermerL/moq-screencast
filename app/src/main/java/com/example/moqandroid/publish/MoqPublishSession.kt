@@ -5,6 +5,9 @@ import com.example.moqandroid.publish.encoder.SurfaceVideoEncoder
 import com.example.moqandroid.publish.screen.SystemAudioConfig
 import com.example.moqandroid.publish.screen.encoderInput
 import com.example.moqandroid.publish.screen.encoderOutput
+import com.example.moqandroid.protocol.MOQCAST_CATALOG_SECTION_NAME
+import com.example.moqandroid.protocol.VIDEO_LAYOUT_TRACK_NAME
+import com.example.moqandroid.protocol.videoLayoutCatalogSection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
@@ -30,6 +33,8 @@ class MoqPublishSession(
             MoqBroadcastProducer().use { broadcast ->
                 Log.i(LOG_TAG, "publishing video format=avc3 catalogRotation=unset")
                 val media = broadcast.publishMediaStream("avc3")
+                val videoLayout = broadcast.publishTrack(VIDEO_LAYOUT_TRACK_NAME)
+                broadcast.setCatalogSection(MOQCAST_CATALOG_SECTION_NAME, videoLayoutCatalogSection())
                 val audio = (config.audio as? SystemAudioConfig.Enabled)?.let { audioConfig ->
                     Log.i(
                         LOG_TAG,
@@ -72,6 +77,7 @@ class MoqPublishSession(
                                         SurfaceVideoEncoder(
                                             source = source,
                                             media = media,
+                                            videoLayout = videoLayout,
                                             relayUrl = relayUrl,
                                             lifecycle = lifecycle,
                                         ).run(config.video, broadcastName, config.audio)
@@ -80,6 +86,7 @@ class MoqPublishSession(
                                     }
                                 }
                             } finally {
+                                runCatching { videoLayout.finish() }
                                 runCatching { broadcast.finish() }
                                 session.shutdown()
                             }

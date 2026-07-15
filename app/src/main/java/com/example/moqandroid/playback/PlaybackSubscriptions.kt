@@ -1,10 +1,12 @@
 package com.example.moqandroid.playback
 
+import android.util.Log
 import uniffi.moq.MoqAudioConsumer
 import uniffi.moq.MoqBroadcastConsumer
 import uniffi.moq.MoqMediaConsumer
+import uniffi.moq.MoqTrackConsumer
 
-class PlaybackSubscriptionManager {
+class PlaybackSubscriptionManager(private val logTag: String) {
     fun subscribe(
         broadcast: MoqBroadcastConsumer,
         trackInfo: PlaybackTrackInfo,
@@ -18,11 +20,17 @@ class PlaybackSubscriptionManager {
                 ?: error("audio decoder output unavailable for ${track.name}")
             broadcast.subscribeAudio(track.name, track.audio, output)
         }
+        val videoLayoutConsumer = trackInfo.videoLayoutTrackName?.let { trackName ->
+            runCatching { broadcast.subscribeTrack(trackName) }
+                .onFailure { error -> Log.w(logTag, "video layout control subscription failed", error) }
+                .getOrNull()
+        }
 
         return PlaybackSubscriptions(
             media = media,
             audioConsumer = audioConsumer,
             audioClock = audioClock,
+            videoLayoutConsumer = videoLayoutConsumer,
         )
     }
 }
@@ -31,8 +39,10 @@ class PlaybackSubscriptions(
     val media: MoqMediaConsumer,
     val audioConsumer: MoqAudioConsumer?,
     val audioClock: AudioPlaybackClock?,
+    val videoLayoutConsumer: MoqTrackConsumer?,
 ) {
     fun cancel() {
+        videoLayoutConsumer?.cancel()
         audioConsumer?.cancel()
         media.cancel()
     }

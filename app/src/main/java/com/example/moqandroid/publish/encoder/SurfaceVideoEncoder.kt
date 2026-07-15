@@ -11,17 +11,22 @@ import com.example.moqandroid.publish.PublisherLifecycleEventSink
 import com.example.moqandroid.publish.PublisherState
 import com.example.moqandroid.publish.VideoPublishConfig
 import com.example.moqandroid.publish.VideoPublishSource
+import com.example.moqandroid.publish.VideoPublishTransition
 import com.example.moqandroid.publish.screen.SystemAudioConfig
+import com.example.moqandroid.protocol.VideoLayoutEvent
+import com.example.moqandroid.protocol.VideoLayoutPhase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import uniffi.moq.MoqMediaStreamProducer
+import uniffi.moq.MoqTrackProducer
 import kotlin.coroutines.coroutineContext
 
 class SurfaceVideoEncoder(
     private val source: VideoPublishSource,
     private val media: MoqMediaStreamProducer,
+    private val videoLayout: MoqTrackProducer,
     private val relayUrl: String,
     private val lifecycle: PublisherLifecycleEventSink,
 ) {
@@ -34,6 +39,7 @@ class SurfaceVideoEncoder(
     ) = withContext(Dispatchers.Default) {
         val stats = PublishStatsTracker(relayUrl, broadcastName)
         var activeConfig = config
+        var activeGeneration: Long? = null
         var trackStarted = false
 
         try {
@@ -43,6 +49,7 @@ class SurfaceVideoEncoder(
                     broadcastName = broadcastName,
                     audioConfig = audioConfig,
                     stats = stats,
+                    generation = activeGeneration,
                     onEncodingStarted = {
                         if (!trackStarted) {
                             lifecycle.emit(PublisherEvent.TrackStarted(VIDEO_TRACK_NAME))
@@ -54,12 +61,13 @@ class SurfaceVideoEncoder(
                     LOG_TAG,
                     "restarting H.264 encoder for screen resize " +
                         "from=${activeConfig.width}x${activeConfig.height} " +
-                        "to=${nextConfig.width}x${nextConfig.height} track=reused",
+                        "to=${nextConfig.config.width}x${nextConfig.config.height} " +
+                        "generation=${nextConfig.generation} track=reused",
                 )
-                activeConfig = nextConfig
+                activeConfig = nextConfig.config
+                activeGeneration = nextConfig.generation
             }
         } finally {
-            lifecycle.update(PublisherState.Stopping)
             if (trackStarted) lifecycle.emit(PublisherEvent.TrackStopped(VIDEO_TRACK_NAME))
             runCatching { media.finish() }
         }
@@ -70,8 +78,9 @@ class SurfaceVideoEncoder(
         broadcastName: String,
         audioConfig: SystemAudioConfig,
         stats: PublishStatsTracker,
+        generation: Long?,
         onEncodingStarted: () -> Unit,
-    ): VideoPublishConfig? {
+    ): VideoPublishTransition? {
         var lastError: Throwable? = null
         val attempts = attemptPlanner.attempts(config)
         for ((index, attempt) in attempts.withIndex()) {
@@ -119,7 +128,7 @@ class SurfaceVideoEncoder(
                     ),
                 )
                 encodingStarted = true
-                return drain(codec, media, stats, lifecycle, attempt.config)
+                return drain(codec, media, stats, lifecycle, attempt.config, generation)
             } catch (error: Throwable) {
                 if (encodingStarted && error !is CancellationException) {
                     lifecycle.emit(PublisherEvent.TrackError(VIDEO_TRACK_NAME, error.message ?: error::class.java.name))
@@ -156,9 +165,6 @@ class SurfaceVideoEncoder(
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, config.iFrameIntervalSeconds)
             setInteger(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1)
             profile?.let { setInteger(MediaFormat.KEY_PROFILE, it) }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
-            }
         }
     }
 
@@ -168,14 +174,21 @@ class SurfaceVideoEncoder(
         stats: PublishStatsTracker,
         lifecycle: PublisherLifecycleEventSink,
         activeConfig: VideoPublishConfig,
-    ): VideoPublishConfig? {
+        generation: Long?,
+    ): VideoPublishTransition? {
         val info = MediaCodec.BufferInfo()
         var codecConfig: ByteArray? = null
         var awaitingKeyFrame = true
         var loggedDiscardedDelta = false
+        var outputWasSuspended = false
+        var layoutReadySent = generation == null
         while (coroutineContext.isActive) {
+            publishPendingLayoutEvents()
             source.pollConfigChange()?.let { nextConfig ->
-                if (nextConfig.width != activeConfig.width || nextConfig.height != activeConfig.height) {
+                if (
+                    nextConfig.config.width != activeConfig.width ||
+                    nextConfig.config.height != activeConfig.height
+                ) {
                     return nextConfig
                 }
             }
@@ -208,6 +221,32 @@ class SurfaceVideoEncoder(
                             continue
                         }
 
+                        if (source.isOutputSuspended()) {
+                            if (!outputWasSuspended) {
+                                Log.i(
+                                    LOG_TAG,
+                                    "suspending H.264 output for screen resize " +
+                                        "size=${activeConfig.width}x${activeConfig.height}",
+                                )
+                            }
+                            outputWasSuspended = true
+                            continue
+                        }
+
+                        if (outputWasSuspended) {
+                            outputWasSuspended = false
+                            awaitingKeyFrame = true
+                            loggedDiscardedDelta = false
+                            codec.setParameters(Bundle().apply {
+                                putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+                            })
+                            Log.i(
+                                LOG_TAG,
+                                "screen resize cancelled, waiting for a fresh H.264 IDR " +
+                                    "size=${activeConfig.width}x${activeConfig.height}",
+                            )
+                        }
+
                         val keyFrame = flags.hasKeyFrame()
                         if (awaitingKeyFrame && !keyFrame) {
                             if (!loggedDiscardedDelta) {
@@ -223,16 +262,56 @@ class SurfaceVideoEncoder(
                             Log.i(
                                 LOG_TAG,
                                 "H.264 encoder IDR ready size=${activeConfig.width}x${activeConfig.height} " +
-                                    "parameterSetsBytes=${codecConfig?.size ?: 0}",
+                                    "parameterSetsBytes=${codecConfig?.size ?: 0} " +
+                                    "presentationTimeUs=${info.presentationTimeUs}",
                             )
                         }
                         media.write(frame)
+                        if (!layoutReadySent && generation != null) {
+                            publishLayoutEvent(
+                                VideoLayoutEvent(
+                                    phase = VideoLayoutPhase.Ready,
+                                    generation = generation,
+                                    width = activeConfig.width,
+                                    height = activeConfig.height,
+                                    rotation = null,
+                                ),
+                            )
+                            source.onLayoutReady(generation)
+                            layoutReadySent = true
+                        }
                         stats.onFrame(frame.size, lifecycle::emit)
                     }
                 }
             }
         }
         return null
+    }
+
+    private fun publishPendingLayoutEvents() {
+        while (true) {
+            val event = source.pollLayoutEvent() ?: return
+            publishLayoutEvent(event)
+        }
+    }
+
+    private fun publishLayoutEvent(event: VideoLayoutEvent) {
+        runCatching { videoLayout.writeFrame(event.encode()) }
+            .onSuccess {
+                Log.i(
+                    LOG_TAG,
+                    "video layout ${event.phase.wireValue} generation=${event.generation} " +
+                        "target=${event.width}x${event.height} rotation=${event.rotation ?: "none"}",
+                )
+            }
+            .onFailure { error ->
+                Log.w(
+                    LOG_TAG,
+                    "video layout event failed phase=${event.phase.wireValue} " +
+                        "generation=${event.generation}",
+                    error,
+                )
+            }
     }
 
     private fun java.nio.ByteBuffer.readBytes(info: MediaCodec.BufferInfo): ByteArray {

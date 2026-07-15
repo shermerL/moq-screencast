@@ -141,7 +141,12 @@ fun MoqCatalog.describe(broadcastName: String): String {
     }.trimEnd()
 }
 
-fun MoqVideo.mediaFormat(mime: String, avcConfig: AvcConfig?): MediaFormat {
+fun MoqVideo.mediaFormat(
+    mime: String,
+    avcConfig: AvcConfig?,
+    adaptiveMaxDimension: Int? = null,
+    lowLatency: Boolean = false,
+): MediaFormat {
     val width = coded?.width?.toInt() ?: 1280
     val height = coded?.height?.toInt() ?: 720
     val codecDescription = description
@@ -153,7 +158,11 @@ fun MoqVideo.mediaFormat(mime: String, avcConfig: AvcConfig?): MediaFormat {
             setByteBuffer("csd-0", ByteBuffer.wrap(codecDescription))
         }
         setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, width * height)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+        adaptiveMaxDimension?.takeIf { it > 0 }?.let { maxDimension ->
+            setInteger(MediaFormat.KEY_MAX_WIDTH, maxDimension)
+            setInteger(MediaFormat.KEY_MAX_HEIGHT, maxDimension)
+        }
+        if (lowLatency && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
         }
     }

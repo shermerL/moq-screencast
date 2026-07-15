@@ -4,7 +4,7 @@ import android.os.SystemClock
 import com.example.moqandroid.catalog.PlayableVideoInfo
 import java.util.Locale
 
-class PlaybackStats(private val videoInfo: PlayableVideoInfo) {
+class PlaybackStats(private var videoInfo: PlayableVideoInfo) {
     var renderedFrames = 0
     var receivedFrames = 0
         private set
@@ -17,6 +17,10 @@ class PlaybackStats(private val videoInfo: PlayableVideoInfo) {
     fun onFrameReceived(payloadSize: Int) {
         receivedFrames += 1
         receivedBytes += payloadSize
+    }
+
+    fun updateVideoInfo(nextVideoInfo: PlayableVideoInfo) {
+        videoInfo = nextVideoInfo
     }
 
     fun flushIfDue(updateStatus: (String) -> Unit) {

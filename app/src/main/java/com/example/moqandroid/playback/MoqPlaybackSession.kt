@@ -34,13 +34,15 @@ class MoqPlaybackSession(
                     val broadcast = originConsumer.announcedBroadcast(broadcastName).available()
 
                     status(PlayerState.ReadingCatalog)
-                    val catalog = catalogReader.readFirst(broadcast, broadcastName)
-                    val trackInfo = trackSelector.select(catalog, broadcastName, codecPreference)
+                    broadcast.subscribeCatalog().use { catalogConsumer ->
+                        val catalog = catalogReader.readFirst(catalogConsumer, broadcastName)
+                        val trackInfo = trackSelector.select(catalog, broadcastName, codecPreference)
 
-                    try {
-                        pipeline.play(broadcast, surface, trackInfo)
-                    } finally {
-                        session.shutdown()
+                        try {
+                            pipeline.play(broadcast, surface, trackInfo, catalogConsumer)
+                        } finally {
+                            session.shutdown()
+                        }
                     }
                 }
             }

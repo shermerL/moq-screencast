@@ -2,6 +2,8 @@ package com.example.moqandroid
 
 import android.Manifest
 import android.content.Intent
+import android.content.res.Configuration
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
@@ -10,6 +12,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.View
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
@@ -33,13 +36,17 @@ import com.example.moqandroid.ui.app.SettingsUiState
 import com.example.moqandroid.ui.app.SubscribePanelActions
 import com.example.moqandroid.ui.app.SubscribePanelState
 
-class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
+class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
     private lateinit var projectionManager: MediaProjectionManager
     private lateinit var viewModel: AppViewModel
     private var playerScreen: PlayerScreen? = null
+    private var playbackVideoWidth: Int? = null
+    private var playbackVideoHeight: Int? = null
+    private var defaultRotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        defaultRotationAnimation = window.attributes.rotationAnimation
         projectionManager = getSystemService(MediaProjectionManager::class.java)
         viewModel = ViewModelProvider(this)[AppViewModel::class.java]
         setComposeContent()
@@ -168,16 +175,20 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         val nextBroadcast = viewModel.prepareSubscribe() ?: return
         enterFullscreen()
 
+        playerScreen?.release()
         val screen = PlayerScreen(
             activity = this,
             broadcastName = nextBroadcast,
             surfaceCallback = this,
         )
+        playbackVideoWidth = null
+        playbackVideoHeight = null
         playerScreen = screen
         setContentView(screen.root)
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+        playerScreen?.traceSurfaceEvent("surface created")
         val surface = holder.surface
         if (!surface.isValid) {
             updatePlayerView(PlayerState.SurfaceWaiting, PlayerState.SurfaceWaiting.message(viewModel.playerBroadcast.orEmpty()))
@@ -187,9 +198,16 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         viewModel.startPlayback(surface, ::updatePlayerView)
     }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        playerScreen?.onSurfaceChanged(format, width, height)
+    }
+
+    override fun surfaceRedrawNeeded(holder: SurfaceHolder) {
+        playerScreen?.traceSurfaceEvent("surface redraw needed")
+    }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        playerScreen?.traceSurfaceEvent("surface destroyed")
         viewModel.stopPlayback("Disconnected from ${viewModel.playerBroadcast ?: viewModel.subscribeBroadcastName}.")
     }
 
@@ -203,9 +221,20 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         super.onStop()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        Log.i(
+            LOG_TAG,
+            "playback configuration changed orientation=${newConfig.orientation} " +
+                "screen=${newConfig.screenWidthDp}x${newConfig.screenHeightDp}dp",
+        )
+        playerScreen?.traceSnapshot("configuration changed requestedOrientation=$requestedOrientation")
+    }
+
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && viewModel.playerBroadcast != null) {
             viewModel.showMainUi()
+            playerScreen?.release()
             playerScreen = null
             exitFullscreen()
             setComposeContent()
@@ -217,12 +246,98 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     override fun onDestroy() {
         Log.i(LOG_TAG, "MainActivity destroyed")
+        playerScreen?.release()
         super.onDestroy()
     }
 
     private fun updatePlayerView(state: PlayerState, message: String) {
-        if (state is PlayerState.Playing) {
-            playerScreen?.setVideoSize(state.videoInfo.displayWidth, state.videoInfo.displayHeight)
+        when (state) {
+            is PlayerState.VideoLayoutPreparing -> {
+                val screen = playerScreen ?: return
+                if (
+                    playbackVideoWidth == state.event.width &&
+                    playbackVideoHeight == state.event.height
+                ) {
+                    screen.traceSnapshot(
+                        "layout prepare already applied generation=${state.event.generation}",
+                    )
+                    return
+                }
+                screen.prepareVideoLayout(
+                    event = state.event,
+                    onFrozen = {
+                        if (playerScreen !== screen) return@prepareVideoLayout
+                        screen.traceSnapshot(
+                            "layout freeze armed generation=${state.event.generation}; awaiting decoder",
+                        )
+                    },
+                    onTimeout = {
+                        if (playerScreen !== screen) return@prepareVideoLayout
+                        screen.traceSnapshot(
+                            "layout freeze fallback generation=${state.event.generation}; media state unchanged",
+                        )
+                        restoreConfirmedPlaybackLayout()
+                    },
+                )
+                return
+            }
+            is PlayerState.VideoLayoutReady -> {
+                val screen = playerScreen ?: return
+                screen.markVideoLayoutReady(state.event) {
+                    if (playerScreen !== screen) return@markVideoLayoutReady
+                    applyPlaybackOrientation(state.event.width, state.event.height)
+                    screen.setVideoSize(state.event.width, state.event.height)
+                }
+                return
+            }
+            is PlayerState.VideoLayoutCancelled -> {
+                playerScreen?.cancelVideoLayout(state.event)
+                restoreConfirmedPlaybackLayout()
+                return
+            }
+            else -> Unit
+        }
+        if (state is PlayerState.VideoFrameRendered) {
+            playerScreen?.showVideoFrame(state.transitionId)
+            return
+        }
+        if (state is PlayerState.Playing || state is PlayerState.VideoSizeChanged) {
+            val videoInfo = when (state) {
+                is PlayerState.Playing -> state.videoInfo
+                is PlayerState.VideoSizeChanged -> state.videoInfo
+                else -> null
+            }
+            if (state is PlayerState.VideoSizeChanged) {
+                playbackVideoWidth = videoInfo?.displayWidth
+                playbackVideoHeight = videoInfo?.displayHeight
+                val updateVideoLayout: () -> Unit = {
+                    applyPlaybackOrientation(videoInfo?.displayWidth, videoInfo?.displayHeight)
+                    playerScreen?.setVideoSize(
+                        width = videoInfo?.displayWidth,
+                        height = videoInfo?.displayHeight,
+                        transitionId = state.transitionId,
+                        onLayoutReady = state.onLayoutReady,
+                    )
+                }
+                if (state.coverVideo) {
+                    playerScreen?.coverVideo(state.transitionId, updateVideoLayout) ?: updateVideoLayout()
+                } else {
+                    val deferred = playerScreen?.deferUntilVideoLayoutPrepared(
+                        videoInfo?.displayWidth,
+                        videoInfo?.displayHeight,
+                        updateVideoLayout,
+                    ) == true
+                    if (!deferred) updateVideoLayout()
+                }
+                return
+            }
+            playbackVideoWidth = videoInfo?.displayWidth
+            playbackVideoHeight = videoInfo?.displayHeight
+            applyPlaybackOrientation(videoInfo?.displayWidth, videoInfo?.displayHeight)
+            playerScreen?.setVideoSize(
+                width = videoInfo?.displayWidth,
+                height = videoInfo?.displayHeight,
+            )
         }
         playerScreen?.setStatus(
             message = message,
@@ -240,6 +355,8 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun enterFullscreen() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        updateRotationAnimation(WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT)
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_FULLSCREEN or
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
@@ -250,7 +367,43 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun exitFullscreen() {
+        restoreDefaultOrientation()
+        updateRotationAnimation(defaultRotationAnimation)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+    }
+
+    private fun updateRotationAnimation(rotationAnimation: Int) {
+        val attributes = window.attributes
+        if (attributes.rotationAnimation == rotationAnimation) return
+        attributes.rotationAnimation = rotationAnimation
+        window.attributes = attributes
+        Log.i(LOG_TAG, "playback rotation animation=$rotationAnimation")
+    }
+
+    private fun applyPlaybackOrientation(width: Int?, height: Int?) {
+        if (width == null || height == null || width <= 0 || height <= 0) return
+        val nextOrientation = if (width > height) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        if (requestedOrientation == nextOrientation) return
+
+        Log.i(LOG_TAG, "playback orientation request width=${width} height=$height orientation=$nextOrientation")
+        requestedOrientation = nextOrientation
+    }
+
+    private fun restoreConfirmedPlaybackLayout() {
+        val width = playbackVideoWidth
+        val height = playbackVideoHeight
+        applyPlaybackOrientation(width, height)
+        playerScreen?.setVideoSize(width, height)
+    }
+
+    private fun restoreDefaultOrientation() {
+        if (requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED) return
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
     }
 
     private fun localizedText(resId: Int): String {

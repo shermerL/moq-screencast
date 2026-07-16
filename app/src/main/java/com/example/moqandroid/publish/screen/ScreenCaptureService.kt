@@ -21,6 +21,8 @@ import com.example.moqandroid.publish.PublishSessionConfig
 import com.example.moqandroid.publish.PublishSourceType
 import com.example.moqandroid.publish.PublishState
 import com.example.moqandroid.publish.PublishStatusFacade
+import com.example.moqandroid.publish.audio.AudioPublishConfig
+import com.example.moqandroid.publish.audio.MicrophoneAudioCapture
 import com.example.moqandroid.publish.camera.CameraPublishCapabilityResolver
 import com.example.moqandroid.publish.camera.CameraPublishSource
 import com.example.moqandroid.publish.encoder.H264ProfilePreference
@@ -48,6 +50,8 @@ class ScreenCaptureService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val sourceType = intent.publishSourceType()
+        val includeMicrophone = sourceType == PublishSourceType.Camera &&
+            intent?.getBooleanExtra(EXTRA_MICROPHONE, false) == true
         Log.i(
             LOG_TAG,
             "publish foreground service start action=${intent?.action ?: "null"} " +
@@ -58,6 +62,7 @@ class ScreenCaptureService : Service() {
                 relayUrl = intent.getStringExtra(EXTRA_RELAY_URL).orEmpty(),
                 broadcastName = intent.getStringExtra(EXTRA_BROADCAST_NAME).orEmpty(),
                 sourceType = sourceType,
+                includeMicrophone = false,
             )
             stopPublishing(updateStopped = true)
             stopSelf()
@@ -68,6 +73,7 @@ class ScreenCaptureService : Service() {
             relayUrl = intent?.getStringExtra(EXTRA_RELAY_URL).orEmpty(),
             broadcastName = intent?.getStringExtra(EXTRA_BROADCAST_NAME).orEmpty(),
             sourceType = sourceType,
+            includeMicrophone = includeMicrophone,
         )
 
         if (intent?.action == ACTION_START_PUBLISH) {
@@ -139,10 +145,8 @@ class ScreenCaptureService : Service() {
                 encoderPolicy = intent.encoderPolicy(),
                 h264ProfilePreference = intent.h264ProfilePreference(),
             ),
-            audio = if (intent.getBooleanExtra(EXTRA_SYSTEM_AUDIO, false)) {
-                SystemAudioConfig.Enabled()
-            } else {
-                SystemAudioConfig.Disabled
+            audio = AudioPublishConfig.systemAudio().takeIf {
+                intent.getBooleanExtra(EXTRA_SYSTEM_AUDIO, false)
             },
         )
         val manager = getSystemService(MediaProjectionManager::class.java)
@@ -151,6 +155,9 @@ class ScreenCaptureService : Service() {
             ?: error("Android did not return a MediaProjection.")
         val projectionCallback = projection.registerStopCallback(currentCoroutineContext()[Job])
         try {
+            val audioSource = config.audio?.let {
+                SystemAudioCapture(projection, it, LOG_TAG)
+            }
             MoqPublishSession(
                 relayUrl = relayUrl,
                 lifecycle = statusFacade.eventSink(),
@@ -163,11 +170,9 @@ class ScreenCaptureService : Service() {
                 broadcastName = broadcastName,
                 config = PublishSessionConfig(
                     video = config.video.encoderConfig(),
-                    audio = config.audio,
                 ),
-            ) { producer, audioConfig ->
-                SystemAudioCapture(projection, producer, audioConfig, LOG_TAG).run()
-            }
+                audioSource = audioSource,
+            )
         } finally {
             projection.unregisterCallbackSafe(projectionCallback)
             projection.stopSafe()
@@ -180,6 +185,11 @@ class ScreenCaptureService : Service() {
             encoderPolicy = intent.encoderPolicy(),
             h264ProfilePreference = intent.h264ProfilePreference(),
         )
+        val audioSource = AudioPublishConfig.microphone().takeIf {
+            intent.getBooleanExtra(EXTRA_MICROPHONE, false)
+        }?.let {
+            MicrophoneAudioCapture(it, LOG_TAG)
+        }
         MoqPublishSession(
             relayUrl = relayUrl,
             lifecycle = statusFacade.eventSink(),
@@ -187,6 +197,7 @@ class ScreenCaptureService : Service() {
             source = CameraPublishSource(this, cameraConfig),
             broadcastName = broadcastName,
             config = PublishSessionConfig(video = videoConfig),
+            audioSource = audioSource,
         )
     }
 
@@ -223,6 +234,7 @@ class ScreenCaptureService : Service() {
         relayUrl: String,
         broadcastName: String,
         sourceType: PublishSourceType,
+        includeMicrophone: Boolean,
     ) {
         val text = buildString {
             append("broadcast=")
@@ -254,7 +266,8 @@ class ScreenCaptureService : Service() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val foregroundServiceType = when (sourceType) {
-                PublishSourceType.Camera -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                PublishSourceType.Camera -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or
+                    if (includeMicrophone) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
                 PublishSourceType.Screen -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
                 PublishSourceType.File -> ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             }
@@ -313,6 +326,7 @@ class ScreenCaptureService : Service() {
         private const val EXTRA_VIDEO_HEIGHT = "video_height"
         private const val EXTRA_DENSITY_DPI = "density_dpi"
         private const val EXTRA_SYSTEM_AUDIO = "system_audio"
+        private const val EXTRA_MICROPHONE = "microphone"
         private const val EXTRA_ENCODER_POLICY = "encoder_policy"
         private const val EXTRA_H264_PROFILE = "h264_profile"
         private const val EXTRA_SOURCE_TYPE = "source_type"
@@ -340,7 +354,7 @@ class ScreenCaptureService : Service() {
                 .putExtra(EXTRA_VIDEO_WIDTH, config.video.width)
                 .putExtra(EXTRA_VIDEO_HEIGHT, config.video.height)
                 .putExtra(EXTRA_DENSITY_DPI, config.video.densityDpi)
-                .putExtra(EXTRA_SYSTEM_AUDIO, config.audio is SystemAudioConfig.Enabled)
+                .putExtra(EXTRA_SYSTEM_AUDIO, config.audio != null)
                 .putExtra(EXTRA_ENCODER_POLICY, config.video.encoderPolicy.storageValue)
                 .putExtra(EXTRA_H264_PROFILE, config.video.h264ProfilePreference.storageValue)
                 .putExtra(EXTRA_SOURCE_TYPE, PublishSourceType.Screen.storageValue)
@@ -353,6 +367,7 @@ class ScreenCaptureService : Service() {
             broadcastName: String,
             encoderPolicy: VideoEncoderPolicy,
             h264ProfilePreference: H264ProfilePreference,
+            includeMicrophone: Boolean,
         ) {
             activeSourceType = PublishSourceType.Camera
             val intent = Intent(context, ScreenCaptureService::class.java)
@@ -361,6 +376,7 @@ class ScreenCaptureService : Service() {
                 .putExtra(EXTRA_BROADCAST_NAME, broadcastName)
                 .putExtra(EXTRA_ENCODER_POLICY, encoderPolicy.storageValue)
                 .putExtra(EXTRA_H264_PROFILE, h264ProfilePreference.storageValue)
+                .putExtra(EXTRA_MICROPHONE, includeMicrophone)
                 .putExtra(EXTRA_SOURCE_TYPE, PublishSourceType.Camera.storageValue)
             startService(context, intent)
         }

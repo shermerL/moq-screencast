@@ -1,19 +1,15 @@
 package com.example.moqandroid.publish
 
 import android.util.Log
+import com.example.moqandroid.publish.audio.AudioPublishSource
 import com.example.moqandroid.publish.encoder.SurfaceVideoEncoder
-import com.example.moqandroid.publish.screen.SystemAudioConfig
-import com.example.moqandroid.publish.screen.encoderInput
-import com.example.moqandroid.publish.screen.encoderOutput
 import com.example.moqandroid.protocol.MOQCAST_CATALOG_SECTION_NAME
 import com.example.moqandroid.protocol.VIDEO_LAYOUT_TRACK_NAME
 import com.example.moqandroid.protocol.videoLayoutCatalogSection
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import uniffi.moq.MoqBroadcastProducer
-import uniffi.moq.MoqAudioProducer
 import uniffi.moq.MoqClient
 import uniffi.moq.MoqOriginProducer
 
@@ -25,7 +21,7 @@ class MoqPublishSession(
         source: VideoPublishSource,
         broadcastName: String,
         config: PublishSessionConfig,
-        audioCapture: (suspend CoroutineScope.(MoqAudioProducer, SystemAudioConfig.Enabled) -> Unit)? = null,
+        audioSource: AudioPublishSource? = null,
     ) {
         lifecycle.update(PublisherState.Preparing)
 
@@ -38,7 +34,7 @@ class MoqPublishSession(
                         broadcast.setCatalogSection(MOQCAST_CATALOG_SECTION_NAME, videoLayoutCatalogSection())
                     }
                 }
-                val audio = (config.audio as? SystemAudioConfig.Enabled)?.let { audioConfig ->
+                val audio = audioSource?.config?.let { audioConfig ->
                     Log.i(
                         LOG_TAG,
                         "publishing audio track=0 codec=opus encoder=moq-native input=s16 " +
@@ -56,13 +52,12 @@ class MoqPublishSession(
                                 origin.publish(broadcastName, broadcast)
                                 coroutineScope {
                                     val audioJob = audio?.let { producer ->
-                                        val audioConfig = config.audio as SystemAudioConfig.Enabled
                                         launch {
                                             runCatching {
-                                                audioCapture?.invoke(this, producer, audioConfig)
+                                                audioSource.capture(producer)
                                             }.onFailure { error ->
                                                 if (error !is CancellationException) {
-                                                    Log.w(LOG_TAG, "system audio capture failed", error)
+                                                    Log.w(LOG_TAG, "audio capture failed", error)
                                                     lifecycle.emit(
                                                         PublisherEvent.TrackError(
                                                             name = AUDIO_TRACK_NAME,
@@ -83,7 +78,7 @@ class MoqPublishSession(
                                             videoLayout = videoLayout,
                                             relayUrl = relayUrl,
                                             lifecycle = lifecycle,
-                                        ).run(config.video, broadcastName, config.audio)
+                                        ).run(config.video, broadcastName, audioSource?.config)
                                     } finally {
                                         audioJob?.cancel()
                                     }
@@ -112,5 +107,4 @@ class MoqPublishSession(
 
 data class PublishSessionConfig(
     val video: VideoPublishConfig,
-    val audio: SystemAudioConfig = SystemAudioConfig.Disabled,
 )

@@ -6,13 +6,13 @@ import android.os.Build
 import android.util.DisplayMetrics
 import com.example.moqandroid.config.RelayConfig
 import com.example.moqandroid.media.codec.CodecSupport
+import com.example.moqandroid.publish.audio.AudioPublishConfig
 import com.example.moqandroid.publish.camera.CameraPublishCapabilityResolver
 import com.example.moqandroid.publish.encoder.H264ProfilePreference
 import com.example.moqandroid.publish.encoder.VideoEncoderPolicy
 import com.example.moqandroid.publish.screen.ScreenCaptureService
 import com.example.moqandroid.publish.screen.ScreenPublishConfig
 import com.example.moqandroid.publish.screen.ScreenVideoConfig
-import com.example.moqandroid.publish.screen.SystemAudioConfig
 import com.example.moqandroid.publish.screen.withScreenSize
 import kotlinx.coroutines.flow.StateFlow
 
@@ -64,6 +64,18 @@ class PublishController(private val context: Context) {
                 PublishRequest.RequestCamera,
                 broadcastName,
                 "Camera permission is required before publishing video.\nbroadcast=$broadcastName",
+            )
+        }
+        if (
+            input.source == PublishSourceType.Camera &&
+            input.includeMicrophone &&
+            !input.permissions.recordAudio
+        ) {
+            ScreenCaptureService.prepare()
+            return PublishPreparation(
+                PublishRequest.RequestRecordAudio,
+                broadcastName,
+                "Microphone permission is required before publishing audio.\nbroadcast=$broadcastName",
             )
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !input.permissions.notifications) {
@@ -128,6 +140,7 @@ class PublishController(private val context: Context) {
             broadcastName = request.broadcastName,
             encoderPolicy = request.encoderPolicy,
             h264ProfilePreference = request.h264ProfilePreference,
+            includeMicrophone = request.includeMicrophone,
         )
     }
 
@@ -159,7 +172,7 @@ class PublishController(private val context: Context) {
                 encoderPolicy = encoderPolicy,
                 h264ProfilePreference = h264ProfilePreference,
             ),
-            audio = if (includeSystemAudio) SystemAudioConfig.Enabled() else SystemAudioConfig.Disabled,
+            audio = AudioPublishConfig.systemAudio().takeIf { includeSystemAudio },
         )
     }
 
@@ -178,6 +191,7 @@ data class PublishPreparationInput(
     val source: PublishSourceType,
     val broadcastInput: String,
     val includeSystemAudio: Boolean,
+    val includeMicrophone: Boolean,
     val permissions: PublishPermissions,
 )
 
@@ -203,6 +217,7 @@ data class CameraPublishStartRequest(
     val broadcastName: String,
     val encoderPolicy: VideoEncoderPolicy,
     val h264ProfilePreference: H264ProfilePreference,
+    val includeMicrophone: Boolean,
 )
 
 sealed interface PublishRequest {

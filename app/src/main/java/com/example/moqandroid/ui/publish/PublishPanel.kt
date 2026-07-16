@@ -67,7 +67,9 @@ fun PublishPanel(
                     mode = state.mode,
                     source = state.source,
                     includeSystemAudio = state.includeSystemAudio,
+                    includeMicrophone = state.includeMicrophone,
                     onIncludeSystemAudioChange = actions.onIncludeSystemAudioChange,
+                    onIncludeMicrophoneChange = actions.onIncludeMicrophoneChange,
                     onStopPublish = actions.onStopPublish,
                 )
             } else {
@@ -76,7 +78,9 @@ fun PublishPanel(
                     selectedSource = state.source,
                     onSelectedSource = actions.onSourceChange,
                     includeSystemAudio = state.includeSystemAudio,
+                    includeMicrophone = state.includeMicrophone,
                     onIncludeSystemAudioChange = actions.onIncludeSystemAudioChange,
+                    onIncludeMicrophoneChange = actions.onIncludeMicrophoneChange,
                     onPublish = actions.onPublish,
                 )
             }
@@ -90,7 +94,9 @@ private fun ReadyContent(
     selectedSource: PublishSourceType,
     onSelectedSource: (PublishSourceType) -> Unit,
     includeSystemAudio: Boolean,
+    includeMicrophone: Boolean,
     onIncludeSystemAudioChange: (Boolean) -> Unit,
+    onIncludeMicrophoneChange: (Boolean) -> Unit,
     onPublish: () -> Unit,
 ) {
     SourcePicker(
@@ -103,7 +109,11 @@ private fun ReadyContent(
             includeSystemAudio = includeSystemAudio,
             onIncludeSystemAudioChange = onIncludeSystemAudioChange,
         )
-        PublishSourceType.Camera -> CameraOptionsRow()
+        PublishSourceType.Camera -> {
+            CameraOptionsRow()
+            Spacer(Modifier.height(24.dp))
+            MicrophoneRow(includeMicrophone, onIncludeMicrophoneChange)
+        }
         PublishSourceType.File -> Unit
     }
     Spacer(Modifier.height(26.dp))
@@ -130,7 +140,9 @@ private fun PublishingContent(
     mode: PublishPanelMode,
     source: PublishSourceType,
     includeSystemAudio: Boolean,
+    includeMicrophone: Boolean,
     onIncludeSystemAudioChange: (Boolean) -> Unit,
+    onIncludeMicrophoneChange: (Boolean) -> Unit,
     onStopPublish: () -> Unit,
 ) {
     MoqStatusCard(
@@ -154,7 +166,11 @@ private fun PublishingContent(
             includeSystemAudio = includeSystemAudio,
             onIncludeSystemAudioChange = onIncludeSystemAudioChange,
         )
-        PublishSourceType.Camera -> CameraOptionsRow()
+        PublishSourceType.Camera -> {
+            CameraOptionsRow()
+            Spacer(Modifier.height(24.dp))
+            MicrophoneRow(includeMicrophone, onIncludeMicrophoneChange)
+        }
         PublishSourceType.File -> Unit
     }
     Spacer(Modifier.height(26.dp))
@@ -229,6 +245,27 @@ private fun CameraOptionsRow() {
         MoqPill(
             text = stringResource(R.string.camera_default),
             selected = false,
+        )
+    }
+}
+
+@Composable
+private fun MicrophoneRow(
+    includeMicrophone: Boolean,
+    onIncludeMicrophoneChange: (Boolean) -> Unit,
+) {
+    MoqInfoRow(
+        label = stringResource(R.string.microphone_label),
+        note = stringResource(R.string.microphone_note),
+    ) {
+        MoqPill(
+            text = if (includeMicrophone) {
+                stringResource(R.string.system_audio_on)
+            } else {
+                stringResource(R.string.system_audio_off)
+            },
+            selected = includeMicrophone,
+            onClick = { onIncludeMicrophoneChange(!includeMicrophone) },
         )
     }
 }

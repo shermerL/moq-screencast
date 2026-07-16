@@ -34,8 +34,10 @@
     <string name="coming_soon">Coming soon</string>
     <string name="screen_options">Screen options</string>
     <string name="camera_options">Camera options</string>
-    <string name="camera_options_note">Rear camera, about 720p at 30 fps. Video only.</string>
+    <string name="camera_options_note">Rear camera, about 720p at 30 fps.</string>
     <string name="camera_default">Rear</string>
+    <string name="microphone_label">Microphone</string>
+    <string name="microphone_note">Default stays off. Uses the selected camera with live audio.</string>
     <string name="system_audio_label">System audio</string>
     <string name="system_audio_note">Default stays off. Android 10+ only.</string>
     <string name="include_system_audio">Include system audio</string>
@@ -75,11 +77,11 @@
     <string name="publish_status_starting_camera">Starting camera publish ...</string>
     <string name="publish_status_preparing">Preparing publish ...</string>
     <string name="publish_status_connecting">Publishing to %1$s ...\nbroadcast=%2$s</string>
-    <string name="publish_status_publishing">Publishing to %1$s\nbroadcast=%2$s\nvideo=%3$dx%4$d %5$dfps target=%6$dkbps\nsystem audio=%7$s</string>
+    <string name="publish_status_publishing">Publishing to %1$s\nbroadcast=%2$s\nvideo=%3$dx%4$d %5$dfps target=%6$dkbps\naudio=%7$s</string>
     <string name="publish_status_stats">Publishing to %1$s\nbroadcast=%2$s\nsent=%3$d frames bytes=%4$d bitrate=%5$.0fkbps</string>
     <string name="publish_status_stopping">Stopping publish ...</string>
     <string name="publish_status_stopped">Publish stopped.</string>
-    <string name="publish_status_audio_failed">System audio capture failed:\n%1$s\nVideo publish is still running.</string>
+    <string name="publish_status_audio_failed">Audio capture failed:\n%1$s\nVideo publish is still running.</string>
     <string name="publish_status_failed">Publish failed:\n%1$s</string>
     <string name="system_audio_on">on</string>
     <string name="system_audio_off">off</string>
@@ -89,9 +91,10 @@
     <string name="about_app_note">Media over QUIC screen casting client.</string>
     <string name="about_version">0.2.x</string>
     <string name="broadcast_empty">Broadcast name cannot be empty.</string>
-    <string name="screen_publish_stopped">Screen publish stopped.</string>
+    <string name="publish_stopped_by_user">Publish stopped.</string>
     <string name="screen_capture_permission_denied">Screen capture permission denied.</string>
     <string name="camera_permission_denied">Camera permission denied.</string>
+    <string name="audio_permission_denied">Audio recording permission denied.</string>
     <string name="publish_service_missing_args">Missing publish service arguments.</string>
     <string name="screen_publish_service_missing_args">Missing screen publish service arguments.</string>
     <string name="screen_publish_service_restarted">Screen publish service restarted without projection permission.</string>

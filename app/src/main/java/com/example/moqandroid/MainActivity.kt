@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModelProvider
 import com.example.moqandroid.config.withAppLanguage
 import com.example.moqandroid.playback.PlayerState
+import com.example.moqandroid.playback.PlaybackLayoutCoordinator
 import com.example.moqandroid.publish.PublishRequest
 import com.example.moqandroid.ui.PlayerScreen
 import com.example.moqandroid.ui.app.FirstRunConfig
@@ -40,8 +41,10 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
     private lateinit var projectionManager: MediaProjectionManager
     private lateinit var viewModel: AppViewModel
     private var playerScreen: PlayerScreen? = null
-    private var playbackVideoWidth: Int? = null
-    private var playbackVideoHeight: Int? = null
+    private val playbackLayoutCoordinator = PlaybackLayoutCoordinator(
+        view = { playerScreen },
+        applyOrientation = ::applyPlaybackOrientation,
+    )
     private var defaultRotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,6 +81,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
                                 broadcast = viewModel.publishBroadcastName,
                                 source = viewModel.publishSource,
                                 includeSystemAudio = viewModel.includeSystemAudio,
+                                includeMicrophone = viewModel.includeMicrophone,
                                 status = viewModel.publishStatusMessage,
                                 mode = viewModel.publishPanelMode,
                             ),
@@ -103,8 +107,9 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
                                 onBroadcastChange = viewModel::updatePublishBroadcast,
                                 onSourceChange = viewModel::updatePublishSource,
                                 onIncludeSystemAudioChange = viewModel::updateIncludeSystemAudio,
+                                onIncludeMicrophoneChange = viewModel::updateIncludeMicrophone,
                                 onPublish = ::requestPublish,
-                                onStopPublish = { viewModel.stopPublish(localizedText(R.string.screen_publish_stopped)) },
+                                onStopPublish = { viewModel.stopPublish(localizedText(R.string.publish_stopped_by_user)) },
                             ),
                             subscribe = SubscribePanelActions(
                                 onRelayUrlChange = viewModel::updateHomeRelayUrl,
@@ -158,10 +163,10 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
                 if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                     requestPublish()
                 } else {
-                    val message = if (requestCode == REQUEST_CAMERA) {
-                        localizedText(R.string.camera_permission_denied)
-                    } else {
-                        localizedText(R.string.screen_capture_permission_denied)
+                    val message = when (requestCode) {
+                        REQUEST_CAMERA -> localizedText(R.string.camera_permission_denied)
+                        REQUEST_RECORD_AUDIO -> localizedText(R.string.audio_permission_denied)
+                        else -> localizedText(R.string.screen_capture_permission_denied)
                     }
                     viewModel.failPublish(message)
                 }
@@ -192,8 +197,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
             broadcastName = nextBroadcast,
             surfaceCallback = this,
         )
-        playbackVideoWidth = null
-        playbackVideoHeight = null
+        playbackLayoutCoordinator.reset()
         playerScreen = screen
         setContentView(screen.root)
     }
@@ -247,6 +251,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
             viewModel.showMainUi()
             playerScreen?.release()
             playerScreen = null
+            playbackLayoutCoordinator.reset()
             exitFullscreen()
             setComposeContent()
             return true
@@ -262,94 +267,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
     }
 
     private fun updatePlayerView(state: PlayerState, message: String) {
-        when (state) {
-            is PlayerState.VideoLayoutPreparing -> {
-                val screen = playerScreen ?: return
-                if (
-                    playbackVideoWidth == state.event.width &&
-                    playbackVideoHeight == state.event.height
-                ) {
-                    screen.traceSnapshot(
-                        "layout prepare already applied generation=${state.event.generation}",
-                    )
-                    return
-                }
-                screen.prepareVideoLayout(
-                    event = state.event,
-                    onFrozen = {
-                        if (playerScreen !== screen) return@prepareVideoLayout
-                        screen.traceSnapshot(
-                            "layout freeze armed generation=${state.event.generation}; awaiting decoder",
-                        )
-                    },
-                    onTimeout = {
-                        if (playerScreen !== screen) return@prepareVideoLayout
-                        screen.traceSnapshot(
-                            "layout freeze fallback generation=${state.event.generation}; media state unchanged",
-                        )
-                        restoreConfirmedPlaybackLayout()
-                    },
-                )
-                return
-            }
-            is PlayerState.VideoLayoutReady -> {
-                val screen = playerScreen ?: return
-                screen.markVideoLayoutReady(state.event) {
-                    if (playerScreen !== screen) return@markVideoLayoutReady
-                    applyPlaybackOrientation(state.event.width, state.event.height)
-                    screen.setVideoSize(state.event.width, state.event.height)
-                }
-                return
-            }
-            is PlayerState.VideoLayoutCancelled -> {
-                playerScreen?.cancelVideoLayout(state.event)
-                restoreConfirmedPlaybackLayout()
-                return
-            }
-            else -> Unit
-        }
-        if (state is PlayerState.VideoFrameRendered) {
-            playerScreen?.showVideoFrame(state.transitionId)
-            return
-        }
-        if (state is PlayerState.Playing || state is PlayerState.VideoSizeChanged) {
-            val videoInfo = when (state) {
-                is PlayerState.Playing -> state.videoInfo
-                is PlayerState.VideoSizeChanged -> state.videoInfo
-                else -> null
-            }
-            if (state is PlayerState.VideoSizeChanged) {
-                playbackVideoWidth = videoInfo?.displayWidth
-                playbackVideoHeight = videoInfo?.displayHeight
-                val updateVideoLayout: () -> Unit = {
-                    applyPlaybackOrientation(videoInfo?.displayWidth, videoInfo?.displayHeight)
-                    playerScreen?.setVideoSize(
-                        width = videoInfo?.displayWidth,
-                        height = videoInfo?.displayHeight,
-                        transitionId = state.transitionId,
-                        onLayoutReady = state.onLayoutReady,
-                    )
-                }
-                if (state.coverVideo) {
-                    playerScreen?.coverVideo(state.transitionId, updateVideoLayout) ?: updateVideoLayout()
-                } else {
-                    val deferred = playerScreen?.deferUntilVideoLayoutPrepared(
-                        videoInfo?.displayWidth,
-                        videoInfo?.displayHeight,
-                        updateVideoLayout,
-                    ) == true
-                    if (!deferred) updateVideoLayout()
-                }
-                return
-            }
-            playbackVideoWidth = videoInfo?.displayWidth
-            playbackVideoHeight = videoInfo?.displayHeight
-            applyPlaybackOrientation(videoInfo?.displayWidth, videoInfo?.displayHeight)
-            playerScreen?.setVideoSize(
-                width = videoInfo?.displayWidth,
-                height = videoInfo?.displayHeight,
-            )
-        }
+        if (playbackLayoutCoordinator.handle(state)) return
         playerScreen?.setStatus(
             message = message,
             visible = state !is PlayerState.Stats || viewModel.settingsShowPlaybackStats,
@@ -407,13 +325,6 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback2 {
 
         Log.i(LOG_TAG, "playback orientation request width=${width} height=$height orientation=$nextOrientation")
         requestedOrientation = nextOrientation
-    }
-
-    private fun restoreConfirmedPlaybackLayout() {
-        val width = playbackVideoWidth
-        val height = playbackVideoHeight
-        applyPlaybackOrientation(width, height)
-        playerScreen?.setVideoSize(width, height)
     }
 
     private fun restoreDefaultOrientation() {

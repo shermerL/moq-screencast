@@ -1,12 +1,13 @@
 package com.example.moqandroid.publish.screen
 
 import com.example.moqandroid.publish.VideoPublishConfig
+import com.example.moqandroid.publish.audio.AudioPublishConfig
 import com.example.moqandroid.publish.encoder.H264ProfilePreference
 import com.example.moqandroid.publish.encoder.VideoEncoderPolicy
 
 data class ScreenPublishConfig(
     val video: ScreenVideoConfig,
-    val audio: SystemAudioConfig = SystemAudioConfig.Disabled,
+    val audio: AudioPublishConfig? = null,
 )
 
 data class ScreenVideoConfig(
@@ -44,14 +45,3 @@ fun VideoPublishConfig.withScreenSize(sourceWidth: Int, sourceHeight: Int): Vide
 private fun Int.roundDownTo(alignment: Int): Int = this - (this % alignment)
 
 private const val MAX_PUBLISH_LONG_EDGE = 1080
-
-sealed class SystemAudioConfig {
-    data object Disabled : SystemAudioConfig()
-
-    data class Enabled(
-        val sampleRate: Int = 48_000,
-        val channelCount: Int = 2,
-        val bitrate: Int = 96_000,
-        val frameDurationMs: Int = 20,
-    ) : SystemAudioConfig()
-}

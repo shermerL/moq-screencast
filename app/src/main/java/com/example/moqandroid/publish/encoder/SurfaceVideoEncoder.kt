@@ -12,7 +12,7 @@ import com.example.moqandroid.publish.PublisherState
 import com.example.moqandroid.publish.VideoPublishConfig
 import com.example.moqandroid.publish.VideoPublishSource
 import com.example.moqandroid.publish.VideoPublishTransition
-import com.example.moqandroid.publish.screen.SystemAudioConfig
+import com.example.moqandroid.publish.audio.AudioPublishConfig
 import com.example.moqandroid.protocol.VideoLayoutEvent
 import com.example.moqandroid.protocol.VideoLayoutPhase
 import kotlinx.coroutines.CancellationException
@@ -36,7 +36,7 @@ class SurfaceVideoEncoder(
     suspend fun run(
         config: VideoPublishConfig,
         broadcastName: String,
-        audioConfig: SystemAudioConfig,
+        audioConfig: AudioPublishConfig?,
     ) = withContext(Dispatchers.Default) {
         val stats = PublishStatsTracker(relayUrl, broadcastName)
         var activeConfig = config
@@ -77,7 +77,7 @@ class SurfaceVideoEncoder(
     private suspend fun runAttempts(
         config: VideoPublishConfig,
         broadcastName: String,
-        audioConfig: SystemAudioConfig,
+        audioConfig: AudioPublishConfig?,
         stats: PublishStatsTracker,
         generation: Long?,
         onEncodingStarted: () -> Unit,
@@ -125,7 +125,7 @@ class SurfaceVideoEncoder(
                         height = attempt.config.height,
                         bitrate = attempt.config.bitrate,
                         frameRate = attempt.config.frameRate,
-                        audioEnabled = audioConfig is SystemAudioConfig.Enabled,
+                        audioEnabled = audioConfig != null,
                     ),
                 )
                 encodingStarted = true
@@ -148,10 +148,13 @@ class SurfaceVideoEncoder(
                     error,
                 )
             } finally {
-                if (sourceAttached) source.detachEncoderSurface()
-                if (codecStarted) runCatching { codec?.stop() }
-                codec?.release()
-                inputSurface?.release()
+                try {
+                    if (sourceAttached) source.detachEncoderSurface()
+                } finally {
+                    if (codecStarted) runCatching { codec?.stop() }
+                    codec?.release()
+                    inputSurface?.release()
+                }
             }
         }
 

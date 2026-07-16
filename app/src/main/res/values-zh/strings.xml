@@ -34,8 +34,10 @@
     <string name="coming_soon">即将支持</string>
     <string name="screen_options">屏幕选项</string>
     <string name="camera_options">摄像头选项</string>
-    <string name="camera_options_note">后置摄像头，约 720p、30 fps，仅视频。</string>
+    <string name="camera_options_note">后置摄像头，约 720p、30 fps。</string>
     <string name="camera_default">后置</string>
+    <string name="microphone_label">麦克风</string>
+    <string name="microphone_note">默认关闭。开启后随摄像头发布实时声音。</string>
     <string name="system_audio_label">系统音频</string>
     <string name="system_audio_note">默认关闭。仅 Android 10+。</string>
     <string name="include_system_audio">包含系统音频</string>
@@ -75,11 +77,11 @@
     <string name="publish_status_starting_camera">正在启动摄像头发布 ...</string>
     <string name="publish_status_preparing">正在准备发布 ...</string>
     <string name="publish_status_connecting">正在发布到 %1$s ...\nbroadcast=%2$s</string>
-    <string name="publish_status_publishing">正在发布到 %1$s\nbroadcast=%2$s\nvideo=%3$dx%4$d %5$dfps target=%6$dkbps\n系统音频=%7$s</string>
+    <string name="publish_status_publishing">正在发布到 %1$s\nbroadcast=%2$s\nvideo=%3$dx%4$d %5$dfps target=%6$dkbps\n音频=%7$s</string>
     <string name="publish_status_stats">正在发布到 %1$s\nbroadcast=%2$s\nsent=%3$d frames bytes=%4$d bitrate=%5$.0fkbps</string>
     <string name="publish_status_stopping">正在停止发布 ...</string>
     <string name="publish_status_stopped">发布已停止。</string>
-    <string name="publish_status_audio_failed">系统音频采集失败:\n%1$s\n视频发布仍在运行。</string>
+    <string name="publish_status_audio_failed">音频采集失败:\n%1$s\n视频发布仍在运行。</string>
     <string name="publish_status_failed">发布失败:\n%1$s</string>
     <string name="system_audio_on">on</string>
     <string name="system_audio_off">off</string>
@@ -89,9 +91,10 @@
     <string name="about_app_note">Media over QUIC 屏幕投送客户端。</string>
     <string name="about_version">0.2.x</string>
     <string name="broadcast_empty">Broadcast 名称不能为空。</string>
-    <string name="screen_publish_stopped">屏幕发布已停止。</string>
+    <string name="publish_stopped_by_user">发布已停止。</string>
     <string name="screen_capture_permission_denied">屏幕采集权限被拒绝。</string>
     <string name="camera_permission_denied">摄像头权限被拒绝。</string>
+    <string name="audio_permission_denied">录音权限被拒绝。</string>
     <string name="publish_service_missing_args">缺少发布服务参数。</string>
     <string name="screen_publish_service_missing_args">缺少屏幕发布服务参数。</string>
     <string name="screen_publish_service_restarted">屏幕发布服务重启时缺少投屏权限。</string>

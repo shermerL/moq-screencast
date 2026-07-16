@@ -18,13 +18,14 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import com.example.moqandroid.playback.PlayerState
+import com.example.moqandroid.playback.PlaybackLayoutView
 import com.example.moqandroid.protocol.VideoLayoutEvent
 
 class PlayerScreen(
     private val activity: Activity,
     broadcastName: String,
     surfaceCallback: SurfaceHolder.Callback,
-) {
+) : PlaybackLayoutView {
     private var videoWidth: Int? = null
     private var videoHeight: Int? = null
     private var pendingLayoutReady: (() -> Unit)? = null
@@ -91,7 +92,7 @@ class PlayerScreen(
         status.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
-    fun prepareVideoLayout(
+    override fun prepareVideoLayout(
         event: VideoLayoutEvent,
         onFrozen: () -> Unit,
         onTimeout: () -> Unit,
@@ -169,7 +170,7 @@ class PlayerScreen(
         )
     }
 
-    fun markVideoLayoutReady(event: VideoLayoutEvent, onReady: () -> Unit) {
+    override fun markVideoLayoutReady(event: VideoLayoutEvent, onReady: () -> Unit) {
         if (event.generation != activeLayoutGeneration) return
         logSnapshot("layout encoder ready generation=${event.generation}")
         val action = {
@@ -186,7 +187,7 @@ class PlayerScreen(
         }
     }
 
-    fun deferUntilVideoLayoutPrepared(width: Int?, height: Int?, action: () -> Unit): Boolean {
+    override fun deferUntilVideoLayoutPrepared(width: Int?, height: Int?, action: () -> Unit): Boolean {
         if (
             activeLayoutGeneration == null ||
             freezeFrameSubmitted ||
@@ -200,7 +201,7 @@ class PlayerScreen(
         return true
     }
 
-    fun cancelVideoLayout(event: VideoLayoutEvent) {
+    override fun cancelVideoLayout(event: VideoLayoutEvent) {
         if (event.generation != activeLayoutGeneration) return
         logSnapshot("layout cancelled generation=${event.generation}")
         hideVideoFreeze()
@@ -212,7 +213,7 @@ class PlayerScreen(
         mainHandler.removeCallbacksAndMessages(null)
     }
 
-    fun coverVideo(transitionId: Int, onCovered: () -> Unit) {
+    override fun coverVideo(transitionId: Int, onCovered: () -> Unit) {
         activeTransitionId = transitionId
         videoShutter.visibility = View.VISIBLE
         logSnapshot("shutter visible requested")
@@ -233,7 +234,7 @@ class PlayerScreen(
         )
     }
 
-    fun showVideoFrame(transitionId: Int) {
+    override fun showVideoFrame(transitionId: Int) {
         if (transitionId != activeTransitionId) {
             Log.i(LOG_TAG, "rotationTrace=$transitionId ignoring stale frame rendered callback")
             return
@@ -252,11 +253,11 @@ class PlayerScreen(
         }
     }
 
-    fun setVideoSize(
+    override fun setVideoSize(
         width: Int?,
         height: Int?,
-        transitionId: Int? = null,
-        onLayoutReady: (() -> Unit)? = null,
+        transitionId: Int?,
+        onLayoutReady: (() -> Unit)?,
     ) {
         transitionId?.let {
             if (activeTransitionId != it) {
@@ -359,7 +360,7 @@ class PlayerScreen(
         scheduleSurfaceLayout()
     }
 
-    fun traceSnapshot(event: String) {
+    override fun traceSnapshot(event: String) {
         logSnapshot(event)
     }
 

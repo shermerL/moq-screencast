@@ -86,6 +86,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var includeSystemAudio by mutableStateOf(false)
         private set
+    var includeMicrophone by mutableStateOf(false)
+        private set
     var publishSource by mutableStateOf(PublishSourceType.Screen)
         private set
     var playerBroadcast by mutableStateOf<String?>(null)
@@ -180,9 +182,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         includeSystemAudio = value
     }
 
+    fun updateIncludeMicrophone(value: Boolean) {
+        includeMicrophone = value
+    }
+
     fun updatePublishSource(value: PublishSourceType) {
         publishSource = value
-        if (value != PublishSourceType.Screen) includeSystemAudio = false
     }
 
     fun showMainUi() {
@@ -258,6 +263,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 source = publishSource,
                 broadcastInput = publishBroadcastName,
                 includeSystemAudio = includeSystemAudio,
+                includeMicrophone = includeMicrophone,
                 permissions = PublishPermissions(
                     camera = hasCameraPermission,
                     notifications = hasNotificationPermission,
@@ -298,6 +304,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 broadcastName = activeBroadcastName,
                 encoderPolicy = VideoEncoderPolicy.fromCompatibilityMode(configState.publishCompatibilityMode),
                 h264ProfilePreference = configState.h264ProfilePreference,
+                includeMicrophone = includeMicrophone,
             ),
         )
     }

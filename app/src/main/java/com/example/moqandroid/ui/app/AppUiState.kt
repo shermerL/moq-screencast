@@ -38,6 +38,7 @@ data class PublishPanelState(
     val broadcast: String,
     val source: PublishSourceType,
     val includeSystemAudio: Boolean,
+    val includeMicrophone: Boolean,
     val status: String,
     val mode: PublishPanelMode,
 )
@@ -47,6 +48,7 @@ data class PublishPanelActions(
     val onBroadcastChange: (String) -> Unit,
     val onSourceChange: (PublishSourceType) -> Unit,
     val onIncludeSystemAudioChange: (Boolean) -> Unit,
+    val onIncludeMicrophoneChange: (Boolean) -> Unit,
     val onPublish: () -> Unit,
     val onStopPublish: () -> Unit,
 )

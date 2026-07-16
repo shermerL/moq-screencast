@@ -89,7 +89,7 @@
     <string name="relay_url_note">发布和订阅使用的默认 relay。</string>
     <string name="about_app_label">MoQCast Android</string>
     <string name="about_app_note">Media over QUIC 屏幕投送客户端。</string>
-    <string name="about_version">0.2.x</string>
+    <string name="about_version">0.3.x</string>
     <string name="broadcast_empty">Broadcast 名称不能为空。</string>
     <string name="publish_stopped_by_user">发布已停止。</string>
     <string name="screen_capture_permission_denied">屏幕采集权限被拒绝。</string>

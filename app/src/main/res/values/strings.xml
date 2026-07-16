@@ -89,7 +89,7 @@
     <string name="relay_url_note">Default relay for publish and subscribe.</string>
     <string name="about_app_label">MoQCast Android</string>
     <string name="about_app_note">Media over QUIC screen casting client.</string>
-    <string name="about_version">0.2.x</string>
+    <string name="about_version">0.3.x</string>
     <string name="broadcast_empty">Broadcast name cannot be empty.</string>
     <string name="publish_stopped_by_user">Publish stopped.</string>
     <string name="screen_capture_permission_denied">Screen capture permission denied.</string>

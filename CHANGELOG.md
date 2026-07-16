@@ -10,6 +10,18 @@ This file documents notable changes for each project version.
 
 No changes yet.
 
+## 0.3.0 (Debug) - 2026-07-16
+
+### 中文
+
+- 新增后置摄像头视频发布和可选麦克风音频
+- 支持屏幕共享横竖屏切换
+
+### English
+
+- Add rear-camera video publishing with optional microphone audio
+- Support portrait and landscape transitions during screen sharing
+
 ## 0.2.2 (Debug) - 2026-07-03
 
 ### 中文
